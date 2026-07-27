@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Risk & Attack Path — CyberShield Nexus</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar-brand"><h1>🛡️ CyberShield</h1><span>Security Intelligence</span></div>
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Main</div>
+    <a href="/dashboard.html" class="nav-item"><span class="icon">📊</span> Dashboard</a>
+    <div class="nav-section-label">Assets</div>
+    <a href="/servers.html" class="nav-item"><span class="icon">🖥️</span> Servers</a>
+    <a href="/firewalls.html" class="nav-item"><span class="icon">🔥</span> Firewalls</a>
+    <a href="/licenses.html" class="nav-item"><span class="icon">📋</span> Licenses</a>
+    <a href="/hardware.html" class="nav-item"><span class="icon">⚙️</span> Hardware</a>
+    <div class="nav-section-label">Security</div>
+    <a href="/incidents.html" class="nav-item"><span class="icon">🚨</span> Incidents</a>
+    <a href="/risk.html" class="nav-item active"><span class="icon">📈</span> Risk & Attack Path</a>
+    <a href="/audit-log.html" class="nav-item"><span class="icon">📜</span> Audit Log</a>
+  </nav>
+  <div class="sidebar-footer"><button onclick="logout()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;">⏏ Sign Out</button></div>
+</aside>
+<header class="topbar">
+  <span class="topbar-title">Risk Engine & Attack Path</span>
+  <div class="topbar-right">
+    <div class="topbar-user">
+      <div class="user-avatar" id="topbar-avatar">A</div>
+      <div><div style="font-weight:600;font-size:13px" id="topbar-username"></div>
+      <div style="font-size:10px;color:var(--text-muted)" id="topbar-role"></div></div>
+    </div>
+  </div>
+</header>
+<main class="main-content">
+  <div class="mb-6">
+    <h2 style="font-size:20px;font-weight:700">Risk Engine & Attack Path</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-top:2px">Live risk scores and BFS-computed attack path from compromised entry points</p>
+  </div>
+
+  <!-- Risk Scores for all servers -->
+  <div class="card mb-6">
+    <div class="card-header">
+      <span class="card-title">📊 Server Risk Scores</span>
+      <button class="btn btn-sm btn-primary" onclick="loadRisks()">🔄 Refresh</button>
+    </div>
+    <div class="table-wrapper">
+      <div id="risk-loading"><div class="spinner"></div></div>
+      <table id="risk-table" style="display:none">
+        <thead><tr>
+          <th>Server ID</th><th>Risk Score</th><th>Severity</th><th>Breakdown</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="risk-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- BFS Attack Path Tool -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">🔍 BFS Attack Path Finder</span>
+    </div>
+    <div class="card-body">
+      <div class="alert alert-info mb-4">
+        ℹ️ This tool simulates what happens when a user account is compromised. BFS finds the shortest path an attacker would take from the entry point to any target asset.
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:12px;align-items:end">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Start ID (Compromised)</label>
+          <input class="form-control" id="bfs-start-id" value="3" type="number">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Start Type</label>
+          <select class="form-control" id="bfs-start-type">
+            <option>USER</option><option>SERVER</option><option>FIREWALL</option><option>HARDWARE</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Target ID (High-Value)</label>
+          <input class="form-control" id="bfs-target-id" value="3" type="number">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Target Type</label>
+          <select class="form-control" id="bfs-target-type">
+            <option>SERVER</option><option>USER</option><option>FIREWALL</option><option>HARDWARE</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="runBFS()">Find Path →</button>
+      </div>
+
+      <div id="bfs-result" style="margin-top:24px;display:none">
+        <div id="bfs-not-found" class="alert alert-success" style="display:none">✅ No attack path found — target is isolated</div>
+        <div id="bfs-found" style="display:none">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <span class="badge badge-red" style="font-size:13px;padding:6px 14px">⚠ PATH FOUND</span>
+              <span style="margin-left:12px;color:var(--text-muted);font-size:13px" id="bfs-hops"></span>
+            </div>
+            <button class="btn btn-sm btn-danger" onclick="evaluateTarget()">🔍 Evaluate & Create Incident</button>
+          </div>
+          <div class="attack-path" id="bfs-path-display"></div>
+          <div class="mt-4">
+            <div class="alert alert-warning">
+              ⚠ Attack route: If <strong id="bfs-start-label"></strong> is compromised, an attacker can reach <strong id="bfs-target-label"></strong> in <strong id="bfs-hops2"></strong> hops.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- All reachable assets -->
+      <div style="margin-top:24px">
+        <div class="flex items-center justify-between mb-4">
+          <strong style="font-size:13px">All Assets Reachable from Entry Point</strong>
+          <button class="btn btn-sm btn-secondary" onclick="loadReachable()">Show Reachable →</button>
+        </div>
+        <div id="reachable-result" style="display:none">
+          <div class="attack-path" id="reachable-display"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="toast-container"></div>
+<script src="/js/auth.js"></script>
+<script>
+  requireAuth(); renderTopbarUser();
+  let bfsResult = null;
+
+  async function loadRisks() {
+    try {
+      const risks = await apiGet('/risk/servers');
+      document.getElementById('risk-loading').style.display = 'none';
+      document.getElementById('risk-table').style.display = '';
+      document.getElementById('risk-body').innerHTML = Object.entries(risks).map(([id, r]) => `
+        <tr>
+          <td><strong>Server #${id}</strong></td>
+          <td>${riskBar(r.score)}</td>
+          <td>${severityBadge(r.severity)}</td>
+          <td style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-muted)">
+            ${Object.entries(r.breakdown).map(([k,v]) => `${k}: +${v}`).join(' | ')}
+          </td>
+          <td>
+            <button class="btn btn-sm btn-danger" onclick="evaluateServer(${id})">⚡ Evaluate</button>
+          </td>
+        </tr>`).join('');
+    } catch(e) { toast('Failed: ' + e.message, 'error'); }
+  }
+
+  async function evaluateServer(id) {
+    try {
+      const result = await apiPost(`/risk/evaluate/server/${id}`, {});
+      if (result.incidentCreated) {
+        toast(`Incident #${result.incidentId} created! Score: ${result.score}`, 'error');
+      } else {
+        toast(`Score: ${result.score}/100 — below threshold, no incident`, 'info');
+      }
+      loadRisks();
+    } catch(e) { toast('Error: ' + e.message, 'error'); }
+  }
+
+  async function runBFS() {
+    const startId   = document.getElementById('bfs-start-id').value;
+    const startType = document.getElementById('bfs-start-type').value;
+    const targetId  = document.getElementById('bfs-target-id').value;
+    const targetType = document.getElementById('bfs-target-type').value;
+
+    try {
+      bfsResult = await apiGet(`/graph/attack-path?startId=${startId}&startType=${startType}&targetId=${targetId}&targetType=${targetType}`);
+      document.getElementById('bfs-result').style.display = '';
+
+      if (!bfsResult.found) {
+        document.getElementById('bfs-not-found').style.display = 'flex';
+        document.getElementById('bfs-found').style.display = 'none';
+        return;
+      }
+
+      document.getElementById('bfs-not-found').style.display = 'none';
+      document.getElementById('bfs-found').style.display = '';
+      document.getElementById('bfs-hops').textContent = `${bfsResult.hops} hop${bfsResult.hops > 1 ? 's' : ''}`;
+      document.getElementById('bfs-hops2').textContent = bfsResult.hops;
+      document.getElementById('bfs-start-label').textContent = `${startType}:${startId}`;
+      document.getElementById('bfs-target-label').textContent = `${targetType}:${targetId}`;
+
+      const path = bfsResult.path;
+      document.getElementById('bfs-path-display').innerHTML = path.map((node, idx) => `
+        <span class="path-node ${idx === 0 ? 'compromised' : idx === path.length-1 ? 'target' : ''}">${node}</span>
+        ${idx < path.length-1 ? '<span class="path-arrow">→</span>' : ''}
+      `).join('');
+
+    } catch(e) { toast('BFS failed: ' + e.message, 'error'); }
+  }
+
+  async function evaluateTarget() {
+    if (!bfsResult) return;
+    try {
+      const result = await apiPost(`/risk/evaluate/server/${bfsResult.targetId}`, {});
+      if (result.incidentCreated) {
+        toast(`Incident created! Server #${bfsResult.targetId} score: ${result.score}`, 'error');
+      } else {
+        toast(`Score: ${result.score}/100 — no incident needed`, 'info');
+      }
+    } catch(e) { toast('Error: ' + e.message, 'error'); }
+  }
+
+  async function loadReachable() {
+    const startId   = document.getElementById('bfs-start-id').value;
+    const startType = document.getElementById('bfs-start-type').value;
+    try {
+      const r = await apiGet(`/graph/reachable?startId=${startId}&startType=${startType}`);
+      document.getElementById('reachable-result').style.display = '';
+      document.getElementById('reachable-display').innerHTML = r.reachable.map((node, idx) => `
+        <span class="path-node ${idx === 0 ? 'compromised' : ''}">${node}</span>
+        ${idx < r.reachable.length-1 ? '<span class="path-arrow">→</span>' : ''}
+      `).join('');
+    } catch(e) { toast('Error: ' + e.message, 'error'); }
+  }
+
+  loadRisks();
+</script>
+</body>
+</html>

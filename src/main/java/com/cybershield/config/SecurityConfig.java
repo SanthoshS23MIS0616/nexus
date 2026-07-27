@@ -54,9 +54,15 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Public endpoints — no JWT required
                 .requestMatchers("/api/auth/login").permitAll()
-                .requestMatchers("/api/auth/register").permitAll()    // admin creates users
-                .requestMatchers("/", "/index.html", "/css/**", "/js/**",
-                                 "/images/**", "/favicon.ico").permitAll()
+                .requestMatchers("/api/auth/register").permitAll()
+                // Static frontend files — no auth needed (JWT checked by JS)
+                .requestMatchers("/", "/login.html", "/dashboard.html",
+                                 "/servers.html", "/firewalls.html",
+                                 "/licenses.html", "/hardware.html",
+                                 "/incidents.html", "/risk.html",
+                                 "/audit-log.html",
+                                 "/css/**", "/js/**", "/img/**",
+                                 "/favicon.ico").permitAll()
                 // Everything else requires authentication
                 .anyRequest().authenticated()
             )

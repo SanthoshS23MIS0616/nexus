@@ -42,7 +42,7 @@ public class DataInitializer implements CommandLineRunner {
 
         log.info("===========================================================");
         log.info("  CyberShield Nexus is ready!");
-        log.info("  API running at: http://localhost:8080");
+        log.info("  API running at: http://localhost:8081");
         log.info("  Default accounts:");
         log.info("    admin / Admin@123       → ADMIN role");
         log.info("    serveradmin / Admin@123 → SERVER_ADMIN role");

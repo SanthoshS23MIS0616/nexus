@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firewalls — CyberShield Nexus</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar-brand"><h1>🛡️ CyberShield</h1><span>Security Intelligence</span></div>
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Main</div>
+    <a href="/dashboard.html" class="nav-item"><span class="icon">📊</span> Dashboard</a>
+    <div class="nav-section-label">Assets</div>
+    <a href="/servers.html" class="nav-item"><span class="icon">🖥️</span> Servers</a>
+    <a href="/firewalls.html" class="nav-item active"><span class="icon">🔥</span> Firewalls</a>
+    <a href="/licenses.html" class="nav-item"><span class="icon">📋</span> Licenses</a>
+    <a href="/hardware.html" class="nav-item"><span class="icon">⚙️</span> Hardware</a>
+    <div class="nav-section-label">Security</div>
+    <a href="/incidents.html" class="nav-item"><span class="icon">🚨</span> Incidents</a>
+    <a href="/risk.html" class="nav-item"><span class="icon">📈</span> Risk & Attack Path</a>
+    <a href="/audit-log.html" class="nav-item"><span class="icon">📜</span> Audit Log</a>
+  </nav>
+  <div class="sidebar-footer"><button onclick="logout()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;">⏏ Sign Out</button></div>
+</aside>
+<header class="topbar">
+  <span class="topbar-title">Firewall Management</span>
+  <div class="topbar-right">
+    <div class="topbar-user">
+      <div class="user-avatar" id="topbar-avatar">A</div>
+      <div><div style="font-weight:600;font-size:13px" id="topbar-username"></div>
+      <div style="font-size:10px;color:var(--text-muted)" id="topbar-role"></div></div>
+    </div>
+  </div>
+</header>
+<main class="main-content">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h2 style="font-size:20px;font-weight:700">Firewalls</h2>
+      <p style="color:var(--text-muted);font-size:13px;margin-top:2px">Network perimeter and internal firewall devices</p>
+    </div>
+    <button class="btn btn-primary" onclick="openAdd()">＋ Add Firewall</button>
+  </div>
+  <div class="card">
+    <div class="card-header"><span class="card-title" id="fw-count">Firewalls</span></div>
+    <div class="table-wrapper">
+      <div id="loading"><div class="spinner"></div></div>
+      <table id="fw-table" style="display:none">
+        <thead><tr><th>Name</th><th>IP</th><th>Vendor</th><th>Model</th><th>Status</th><th>Firmware</th><th>Location</th><th>Actions</th></tr></thead>
+        <tbody id="fw-body"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">Add Firewall</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="fw-id">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group"><label class="form-label">Name *</label><input class="form-control" id="f-name" required></div>
+        <div class="form-group"><label class="form-label">IP Address *</label><input class="form-control" id="f-ip" required></div>
+        <div class="form-group"><label class="form-label">Vendor</label><input class="form-control" id="f-vendor"></div>
+        <div class="form-group"><label class="form-label">Model</label><input class="form-control" id="f-model"></div>
+        <div class="form-group"><label class="form-label">Status</label>
+          <select class="form-control" id="f-status"><option>ACTIVE</option><option>INACTIVE</option><option>MAINTENANCE</option><option>DECOMMISSIONED</option></select></div>
+        <div class="form-group"><label class="form-label">Firmware Version</label><input class="form-control" id="f-firmware"></div>
+        <div class="form-group"><label class="form-label">Location</label><input class="form-control" id="f-location"></div>
+        <div class="form-group"><label class="form-label">Rules Count</label><input class="form-control" id="f-rules" type="number"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="save()">Save</button>
+    </div>
+  </div>
+</div>
+<div id="toast-container"></div>
+<script src="/js/auth.js"></script>
+<script>
+  requireAuth(); renderTopbarUser();
+  let firewalls = [];
+  async function load() {
+    try {
+      firewalls = await apiGet('/firewalls');
+      render(firewalls);
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('fw-table').style.display = '';
+      document.getElementById('fw-count').textContent = `Firewalls (${firewalls.length})`;
+    } catch(e) { toast('Failed: ' + e.message, 'error'); }
+  }
+  function render(data) {
+    document.getElementById('fw-body').innerHTML = data.map(f => `<tr>
+      <td><strong>${f.name}</strong></td>
+      <td class="text-mono" style="font-size:12px">${f.ipAddress}</td>
+      <td style="font-size:12px">${f.vendor || '—'}</td>
+      <td style="font-size:12px">${f.model || '—'}</td>
+      <td>${statusBadge(f.status)}</td>
+      <td class="text-mono" style="font-size:11px">${f.firmwareVersion || '—'}</td>
+      <td style="font-size:12px;color:var(--text-muted)">${f.location || '—'}</td>
+      <td>
+        <button class="btn btn-sm btn-secondary" onclick="edit(${f.id})">✏ Edit</button>
+        <button class="btn btn-sm btn-danger" onclick="del(${f.id})" style="margin-left:4px">🗑</button>
+      </td>
+    </tr>`).join('');
+  }
+  function openAdd() {
+    document.getElementById('modal-title').textContent = 'Add Firewall';
+    document.getElementById('fw-id').value = '';
+    ['name','ip','vendor','model','firmware','location'].forEach(f => document.getElementById('f-'+f).value = '');
+    document.getElementById('f-status').value = 'ACTIVE';
+    document.getElementById('modal').classList.add('open');
+  }
+  function edit(id) {
+    const f = firewalls.find(x => x.id === id); if (!f) return;
+    document.getElementById('modal-title').textContent = 'Edit Firewall';
+    document.getElementById('fw-id').value = f.id;
+    document.getElementById('f-name').value = f.name;
+    document.getElementById('f-ip').value = f.ipAddress;
+    document.getElementById('f-vendor').value = f.vendor || '';
+    document.getElementById('f-model').value = f.model || '';
+    document.getElementById('f-status').value = f.status;
+    document.getElementById('f-firmware').value = f.firmwareVersion || '';
+    document.getElementById('f-location').value = f.location || '';
+    document.getElementById('f-rules').value = f.rulesCount || '';
+    document.getElementById('modal').classList.add('open');
+  }
+  async function save() {
+    const id = document.getElementById('fw-id').value;
+    const body = {
+      name: document.getElementById('f-name').value,
+      ipAddress: document.getElementById('f-ip').value,
+      vendor: document.getElementById('f-vendor').value,
+      model: document.getElementById('f-model').value,
+      status: document.getElementById('f-status').value,
+      firmwareVersion: document.getElementById('f-firmware').value,
+      location: document.getElementById('f-location').value,
+      rulesCount: parseInt(document.getElementById('f-rules').value) || 0
+    };
+    try {
+      if (id) await apiPut('/firewalls/' + id, body);
+      else await apiPost('/firewalls', body);
+      toast(id ? 'Updated!' : 'Added!', 'success');
+      closeModal(); load();
+    } catch(e) { toast('Error: ' + e.message, 'error'); }
+  }
+  async function del(id) {
+    if (!confirm('Delete this firewall?')) return;
+    try { await apiDelete('/firewalls/' + id); toast('Deleted', 'success'); load(); }
+    catch(e) { toast('Error: ' + e.message, 'error'); }
+  }
+  function closeModal() { document.getElementById('modal').classList.remove('open'); }
+  load();
+</script>
+</body>
+</html>

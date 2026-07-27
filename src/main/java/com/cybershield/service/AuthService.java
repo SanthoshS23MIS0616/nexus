@@ -37,6 +37,7 @@ public class AuthService {
     private final AuditLogService auditLogService;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final IncidentService incidentService;
 
     // Brute-force protection thresholds
     private static final int MAX_FAILED_ATTEMPTS = 5;
@@ -99,6 +100,10 @@ public class AuthService {
                 log.warn("Account '{}' LOCKED for {} minutes after {} failed attempts",
                         user.getUsername(), LOCKOUT_DURATION_MINUTES, recentFailures);
             }
+
+            // PHASE 3: Trigger Risk Engine after every failed login
+            // This may auto-create a security incident if score >= 50
+            incidentService.triggerUserRiskCheck(request.getUsername(), ipAddress);
 
             throw new RuntimeException("Invalid username or password");
         }

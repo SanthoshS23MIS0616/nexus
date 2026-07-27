@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Incidents — CyberShield Nexus</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="sidebar-brand"><h1>🛡️ CyberShield</h1><span>Security Intelligence</span></div>
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Main</div>
+    <a href="/dashboard.html" class="nav-item"><span class="icon">📊</span> Dashboard</a>
+    <div class="nav-section-label">Assets</div>
+    <a href="/servers.html" class="nav-item"><span class="icon">🖥️</span> Servers</a>
+    <a href="/firewalls.html" class="nav-item"><span class="icon">🔥</span> Firewalls</a>
+    <a href="/licenses.html" class="nav-item"><span class="icon">📋</span> Licenses</a>
+    <a href="/hardware.html" class="nav-item"><span class="icon">⚙️</span> Hardware</a>
+    <div class="nav-section-label">Security</div>
+    <a href="/incidents.html" class="nav-item active"><span class="icon">🚨</span> Incidents</a>
+    <a href="/risk.html" class="nav-item"><span class="icon">📈</span> Risk & Attack Path</a>
+    <a href="/audit-log.html" class="nav-item"><span class="icon">📜</span> Audit Log</a>
+  </nav>
+  <div class="sidebar-footer"><button onclick="logout()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;">⏏ Sign Out</button></div>
+</aside>
+<header class="topbar">
+  <span class="topbar-title">Security Incidents</span>
+  <div class="topbar-right">
+    <div class="topbar-user">
+      <div class="user-avatar" id="topbar-avatar">A</div>
+      <div><div style="font-weight:600;font-size:13px" id="topbar-username"></div>
+      <div style="font-size:10px;color:var(--text-muted)" id="topbar-role"></div></div>
+    </div>
+  </div>
+</header>
+<main class="main-content">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h2 style="font-size:20px;font-weight:700">Security Incidents</h2>
+      <p style="color:var(--text-muted);font-size:13px;margin-top:2px">Auto-generated when risk score exceeds threshold</p>
+    </div>
+    <div class="flex gap-2">
+      <button class="btn btn-secondary" onclick="load('open')">🔴 Open Only</button>
+      <button class="btn btn-secondary" onclick="load('all')">📋 All</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title" id="inc-count">Incidents</span>
+    </div>
+    <div class="table-wrapper">
+      <div id="loading"><div class="spinner"></div></div>
+      <table id="inc-table" style="display:none">
+        <thead><tr>
+          <th>Severity</th><th>Title</th><th>Status</th><th>Risk Score</th>
+          <th>Affected</th><th>Source IP</th><th>Created</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="inc-body"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <span class="modal-title">Incident Details</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="detail-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+      <button class="btn btn-secondary" id="btn-investigate" onclick="markAction('investigate')">🔍 Investigate</button>
+      <button class="btn btn-success" id="btn-resolve" onclick="markAction('resolve')">✅ Resolve</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="/js/auth.js"></script>
+<script>
+  requireAuth(); renderTopbarUser();
+  let incidents = [];
+  let currentId = null;
+
+  async function load(mode = 'all') {
+    try {
+      const path = mode === 'open' ? '/incidents/open' : '/incidents';
+      incidents = await apiGet(path);
+      if (!Array.isArray(incidents)) incidents = [incidents];
+      render();
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('inc-table').style.display = '';
+      document.getElementById('inc-count').textContent = `Incidents (${incidents.length})`;
+    } catch(e) { toast('Failed: ' + e.message, 'error'); }
+  }
+
+  function render() {
+    document.getElementById('inc-body').innerHTML = incidents.map(i => `
+      <tr>
+        <td>${severityBadge(i.severity)}</td>
+        <td style="max-width:280px;font-size:12px">${i.title}</td>
+        <td>${statusBadge(i.status)}</td>
+        <td>${riskBar(i.riskScore || 0)}</td>
+        <td class="text-mono" style="font-size:11px">${i.affectedUsername || '—'}</td>
+        <td class="text-mono" style="font-size:11px;color:var(--text-muted)">${i.sourceIp || '—'}</td>
+        <td style="font-size:11px;color:var(--text-muted)">${formatDateTime(i.createdAt)}</td>
+        <td>
+          <button class="btn btn-sm btn-secondary" onclick="showDetail(${i.id})">Details</button>
+          ${i.status === 'OPEN' || i.status === 'INVESTIGATING'
+            ? `<button class="btn btn-sm btn-success" onclick="quickResolve(${i.id})" style="margin-left:4px">✓</button>`
+            : ''}
+        </td>
+      </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--accent-green);padding:30px">✅ No incidents found</td></tr>';
+  }
+
+  function showDetail(id) {
+    const i = incidents.find(x => x.id === id);
+    if (!i) return;
+    currentId = id;
+    document.getElementById('detail-body').innerHTML = `
+      <div style="display:grid;gap:14px">
+        <div>${severityBadge(i.severity)} ${statusBadge(i.status)}</div>
+        <div><strong style="color:var(--text-secondary);font-size:11px">TITLE</strong>
+          <div style="margin-top:4px">${i.title}</div></div>
+        <div><strong style="color:var(--text-secondary);font-size:11px">DESCRIPTION</strong>
+          <div style="margin-top:4px;font-size:12px;color:var(--text-secondary)">${i.description || '—'}</div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div><strong style="color:var(--text-secondary);font-size:11px">RISK SCORE</strong>
+            <div style="margin-top:4px">${riskBar(i.riskScore || 0)}</div></div>
+          <div><strong style="color:var(--text-secondary);font-size:11px">SOURCE IP</strong>
+            <div class="text-mono" style="margin-top:4px;font-size:13px">${i.sourceIp || '—'}</div></div>
+        </div>
+        ${i.attackPath ? `
+          <div><strong style="color:var(--text-secondary);font-size:11px">ATTACK PATH</strong>
+            <div class="attack-path" style="margin-top:8px">
+              ${i.attackPath.split(' → ').map((node, idx, arr) => `
+                <span class="path-node ${idx === 0 ? 'compromised' : idx === arr.length-1 ? 'target' : ''}">${node}</span>
+                ${idx < arr.length-1 ? '<span class="path-arrow">→</span>' : ''}
+              `).join('')}
+            </div>
+          </div>` : ''}
+        <div><strong style="color:var(--text-secondary);font-size:11px">CREATED</strong>
+          <div style="margin-top:4px;font-size:12px">${formatDateTime(i.createdAt)}</div></div>
+        ${i.resolvedBy ? `<div><strong style="color:var(--text-secondary);font-size:11px">RESOLVED BY</strong>
+          <div style="margin-top:4px">${i.resolvedBy} at ${formatDateTime(i.resolvedAt)}</div></div>` : ''}
+      </div>`;
+    document.getElementById('detail-modal').classList.add('open');
+  }
+
+  async function markAction(action) {
+    if (!currentId) return;
+    try {
+      const path = action === 'resolve'
+        ? `/incidents/${currentId}/resolve`
+        : `/incidents/${currentId}/investigate`;
+      await apiPut(path);
+      toast(action === 'resolve' ? 'Incident resolved!' : 'Marked as investigating', 'success');
+      closeModal();
+      load();
+    } catch(e) { toast('Error: ' + e.message, 'error'); }
+  }
+
+  async function quickResolve(id) {
+    currentId = id;
+    await markAction('resolve');
+  }
+
+  function closeModal() { document.getElementById('detail-modal').classList.remove('open'); }
+  load();
+</script>
+</body>
+</html>
