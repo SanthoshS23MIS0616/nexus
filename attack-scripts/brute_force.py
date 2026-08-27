@@ -2,7 +2,7 @@
 """
 =============================================================================
 ATTACK SCRIPT 1 — Brute Force Login Attack
-CyberShield Nexus | AICTE PYHack02
+CyberShield Nexus | NEDI Demo Scenario
 OWASP Top 10: A07:2021 — Identification and Authentication Failures
 =============================================================================
 

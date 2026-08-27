@@ -5,6 +5,7 @@ import com.cybershield.model.Incident;
 import com.cybershield.model.Incident.IncidentStatus;
 import com.cybershield.model.Incident.Severity;
 import com.cybershield.repository.IncidentRepository;
+import com.cybershield.repository.UserRepository;
 import com.cybershield.service.RiskEngineService.RiskResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,19 +17,18 @@ import java.util.List;
 /**
  * IncidentService — creates and manages security incidents.
  *
+ * FIX 1B: Duplicate check now uses username for user incidents (not null).
+ * FIX 1C: Attack path uses dynamic user ID looked up from DB (not hardcoded 3L).
+ *
  * Called by:
  *   1. AuthService (after every LOGIN_FAIL via triggerUserRiskCheck)
- *   2. RiskController (on-demand via API)
+ *   2. RiskController (on-demand evaluate endpoint)
  *
- * Auto-incident logic:
- *   - Score ≥ 50  → LOW incident created
- *   - Score ≥ 70  → MEDIUM incident created
- *   - Score ≥ 85  → HIGH incident created
- *   - Score ≥ 95  → CRITICAL incident created
- *
- * Duplicate prevention:
- *   - If an OPEN or INVESTIGATING incident already exists for the same asset,
- *     a new one is NOT created (avoid flooding the incident list).
+ * Auto-incident thresholds:
+ *   score ≥ 50  → LOW
+ *   score ≥ 70  → MEDIUM
+ *   score ≥ 85  → HIGH
+ *   score ≥ 95  → CRITICAL
  */
 @Service
 @RequiredArgsConstructor
@@ -36,15 +36,19 @@ import java.util.List;
 public class IncidentService {
 
     private final IncidentRepository incidentRepository;
-    private final RiskEngineService riskEngineService;
-    private final AttackPathService attackPathService;
+    private final RiskEngineService  riskEngineService;
+    private final AttackPathService  attackPathService;
+    private final UserRepository     userRepository;     // FIX 1C: for dynamic user ID lookup
+
+    // ─────────────────────────────────────────────────────────────────────
+    // TRIGGER — called by AuthService on every LOGIN_FAIL
+    // ─────────────────────────────────────────────────────────────────────
 
     /**
      * Evaluate risk for a user and auto-create an incident if score ≥ 50.
-     * Called after every LOGIN_FAIL event.
      *
-     * @param username    The user being attacked
-     * @param sourceIp    IP address of the attacker
+     * @param username  The user being attacked
+     * @param sourceIp  IP address of the attacker
      */
     public void triggerUserRiskCheck(String username, String sourceIp) {
         RiskResult result = riskEngineService.calculateUserRisk(username);
@@ -58,9 +62,6 @@ public class IncidentService {
     /**
      * Evaluate risk for a server and auto-create an incident if score ≥ 50.
      * Called from RiskController when explicitly requested.
-     *
-     * @param serverId    The server's DB ID
-     * @return            The created incident (or null if score < 50)
      */
     public Incident evaluateAndCreateServerIncident(Long serverId) {
         RiskResult result = riskEngineService.calculateServerRisk(serverId);
@@ -71,28 +72,54 @@ public class IncidentService {
         return null;
     }
 
-    // ─── Private helpers ──────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // INCIDENT CREATION — private helpers
+    // ─────────────────────────────────────────────────────────────────────
 
     private void createUserIncident(RiskResult result, String username, String sourceIp) {
-        // Duplicate check (by username stored in affectedUsername field)
+        // FIX 1B: Correct duplicate check using username (was passing null before)
         boolean alreadyOpen = incidentRepository
-                .existsByRelatedAssetIdAndStatusIn(null,
+                .existsByAffectedUsernameAndStatusIn(
+                        username,
                         List.of(IncidentStatus.OPEN, IncidentStatus.INVESTIGATING));
-        // Note: simplified check — full implementation tracks username too
-        // For demo this is sufficient
+
+        if (alreadyOpen) {
+            log.info("Incident already open for user '{}' — skipping duplicate", username);
+            return;
+        }
 
         Severity severity = riskEngineService.scoreToSeverity(result.score);
 
-        String title = String.format("[%s] Brute Force Attack Detected on user '%s'",
+        // FIX 1C: Look up real user ID dynamically from DB (was hardcoded 3L)
+        String attackPathSummary = "";
+        try {
+            var userOpt = userRepository.findByUsername(username);
+            if (userOpt.isPresent()) {
+                Long realUserId = userOpt.get().getId();
+                // Try to find a path from this user to any server (use first server ID=1)
+                var pathResult = attackPathService.findShortestPath(
+                        realUserId, AssetType.USER, 1L, AssetType.SERVER);
+                if (pathResult.found) {
+                    attackPathSummary = pathResult.summary;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not compute attack path for user '{}': {}", username, e.getMessage());
+        }
+
+        String title = String.format("[%s] Brute Force Detected — account '%s'",
                 severity.name(), username);
 
         String description = String.format(
                 "Risk score: %d/100. " +
                 "Breakdown: %s. " +
                 "Source IP: %s. " +
-                "Attacker is attempting repeated logins. " +
-                "Account lockout has been triggered after 5 failures.",
-                result.score, result.breakdown, sourceIp);
+                "Repeated login failures detected. " +
+                "Account auto-locked after 5 consecutive failures. " +
+                "%s",
+                result.score, result.breakdown, sourceIp,
+                attackPathSummary.isEmpty() ? "" :
+                    "Attack path if compromised: " + attackPathSummary);
 
         Incident incident = Incident.builder()
                 .title(title)
@@ -103,6 +130,7 @@ public class IncidentService {
                 .riskScore(result.score)
                 .affectedUsername(username)
                 .sourceIp(sourceIp)
+                .attackPath(attackPathSummary)
                 .build();
 
         Incident saved = incidentRepository.save(incident);
@@ -110,7 +138,7 @@ public class IncidentService {
     }
 
     private Incident createServerIncident(RiskResult result, Long serverId) {
-        // Prevent duplicate open incidents for same server
+        // Prevent duplicate open incident for same server
         if (incidentRepository.existsByRelatedAssetIdAndStatusIn(
                 serverId, List.of(IncidentStatus.OPEN, IncidentStatus.INVESTIGATING))) {
             log.info("Incident already open for server {} — skipping duplicate", serverId);
@@ -119,28 +147,37 @@ public class IncidentService {
 
         Severity severity = riskEngineService.scoreToSeverity(result.score);
 
-        // Try to get attack path to this server (from a USER node — user id=3 = viewer)
+        // FIX 1C: Dynamically compute attack path — not hardcoded user ID
         String attackPathSummary = "";
         try {
-            var pathResult = attackPathService.findShortestPath(
-                    3L, AssetType.USER, serverId, AssetType.SERVER);
-            if (pathResult.found) {
-                attackPathSummary = pathResult.summary;
+            // Try path from all 3 seeded users (admin=1, serveradmin=2, viewer=3)
+            // Use viewer (lowest privilege) as most likely attacker entry point
+            // But resolve actual ID from DB
+            var viewerOpt = userRepository.findByUsername("viewer");
+            if (viewerOpt.isPresent()) {
+                Long viewerUserId = viewerOpt.get().getId();
+                var pathResult = attackPathService.findShortestPath(
+                        viewerUserId, AssetType.USER, serverId, AssetType.SERVER);
+                if (pathResult.found) {
+                    attackPathSummary = pathResult.summary;
+                }
             }
         } catch (Exception e) {
             log.warn("Could not compute attack path for server {}: {}", serverId, e.getMessage());
         }
 
-        String title = String.format("[%s] High Risk Server Detected: Server ID %d",
+        String title = String.format("[%s] High Risk Server — Server ID %d",
                 severity.name(), serverId);
 
         String description = String.format(
                 "Risk score: %d/100. " +
                 "Breakdown: %s. " +
-                "Attack path: [%s]. " +
+                "%s" +
                 "Immediate review recommended.",
-                result.score, result.breakdown,
-                attackPathSummary.isEmpty() ? "N/A" : attackPathSummary);
+                result.score,
+                result.breakdown,
+                attackPathSummary.isEmpty() ? "" :
+                    "Attack path: [" + attackPathSummary + "]. ");
 
         Incident incident = Incident.builder()
                 .title(title)
@@ -158,7 +195,9 @@ public class IncidentService {
         return saved;
     }
 
-    // ─── CRUD for Incident Management ────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // CRUD — Incident management
+    // ─────────────────────────────────────────────────────────────────────
 
     public List<Incident> getAllIncidents() {
         return incidentRepository.findTop20ByOrderByCreatedAtDesc();

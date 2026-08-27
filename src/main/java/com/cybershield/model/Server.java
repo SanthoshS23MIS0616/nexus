@@ -70,6 +70,10 @@ public class Server {
     @Column(length = 500)
     private String notes;
 
+    /** Maps this server to a NEDI DigitalService (e.g. "EXAM_PORTAL") */
+    @Column(name = "service_code", length = 30)
+    private String serviceCode;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

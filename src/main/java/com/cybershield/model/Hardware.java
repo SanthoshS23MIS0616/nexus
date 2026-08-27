@@ -13,8 +13,8 @@ import java.time.LocalDateTime;
  * Hardware entity — tracks physical data center hardware assets.
  * Covers switches, routers, UPS, racks, cables, storage arrays etc.
  *
- * This is the "Hardware Inventory and Asset Tracking" module required
- * by the AICTE PYHack02 problem statement (Section 10).
+ * This is the Hardware Inventory and Asset Tracking module for the
+ * NEDI (National Education Digital Infrastructure) demo scenario.
  */
 @Entity
 @Table(name = "hardware")
@@ -28,7 +28,7 @@ public class Hardware {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Unique physical asset tag (e.g. "AICTE-SW-001")
+    // Unique physical asset tag (e.g. "NEDI-SW-001")
     @Column(name = "asset_tag", nullable = false, unique = true, length = 50)
     private String assetTag;
 

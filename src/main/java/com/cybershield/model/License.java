@@ -1,5 +1,6 @@
 package com.cybershield.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -62,6 +63,12 @@ public class License {
 
     @Column(name = "assigned_to", length = 100)
     private String assignedTo;               // team or server name
+
+    // Link to specific server — Risk Engine checks per-server expired licenses
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "server_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    private Server server;                   // null = global/unlinked license
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

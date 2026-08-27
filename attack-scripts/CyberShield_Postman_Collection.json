@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "CyberShield Nexus — AICTE PYHack02",
-    "_postman_id": "cybershield-pyhack02",
+    "name": "CyberShield Nexus — NEDI Demo Scenario",
+    "_postman_id": "cybershield-nedi-demo",
     "description": "Full API test collection for CyberShield Nexus security platform.\nIncludes Auth, CRUD, Risk Engine, Attack Path, and 3 Attack Demonstrations.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },

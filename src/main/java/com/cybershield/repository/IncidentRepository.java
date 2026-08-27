@@ -4,6 +4,7 @@ import com.cybershield.model.Incident;
 import com.cybershield.model.Incident.IncidentStatus;
 import com.cybershield.model.Incident.Severity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -14,18 +15,21 @@ import java.util.List;
 @Repository
 public interface IncidentRepository extends JpaRepository<Incident, Long> {
 
-    // Dashboard: get all open incidents ordered by newest first
+    // Dashboard: open incidents newest first
     List<Incident> findByStatusOrderByCreatedAtDesc(IncidentStatus status);
 
-    // Dashboard: get recent incidents regardless of status
+    // Dashboard: recent incidents regardless of status (pageable)
     List<Incident> findTop20ByOrderByCreatedAtDesc();
 
     // Filter by severity
     List<Incident> findBySeverityOrderByCreatedAtDesc(Severity severity);
 
-    // Count open incidents (for dashboard alert badge)
+    // Count open incidents (dashboard alert badge)
     long countByStatus(IncidentStatus status);
 
-    // Prevent duplicate incident creation for same asset in short time
+    // FIX 1B — correct duplicate check for SERVER incidents by assetId
     boolean existsByRelatedAssetIdAndStatusIn(Long assetId, List<IncidentStatus> statuses);
+
+    // FIX 1B — correct duplicate check for USER incidents by username
+    boolean existsByAffectedUsernameAndStatusIn(String username, List<IncidentStatus> statuses);
 }

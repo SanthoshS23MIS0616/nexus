@@ -2,7 +2,7 @@
 """
 =============================================================================
 RUN ALL ATTACKS — CyberShield Nexus Demo Runner
-AICTE PYHack02
+NEDI Demo Scenario
 =============================================================================
 Runs all 3 attack scripts in sequence with clear section headers.
 Usage:  python run_all_attacks.py
@@ -23,7 +23,7 @@ SEP = "=" * 65
 
 print(SEP)
 print("  CYBERSHIELD NEXUS — FULL ATTACK DEMO SUITE")
-print("  AICTE PYHack02 | All 3 OWASP attacks in sequence")
+print("  NEDI Demo Scenario | All 3 OWASP attacks in sequence")
 print(SEP)
 print()
 

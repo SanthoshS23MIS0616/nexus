@@ -2,7 +2,7 @@
 """
 =============================================================================
 ATTACK SCRIPT 2 — IDOR (Insecure Direct Object Reference) Attack
-CyberShield Nexus | AICTE PYHack02
+CyberShield Nexus | NEDI Demo Scenario
 OWASP Top 10: A01:2021 — Broken Access Control
 =============================================================================
 

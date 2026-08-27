@@ -2,14 +2,19 @@ package com.cybershield;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * CyberShield Nexus — Main Application Entry Point
- * AICTE PYHack02: Cybersecurity Portal for Server & Firewall Management
+ * CyberShield Nexus main application entry point.
  *
- * Author: Santhosh (23MIS0616), B.Tech Software Engineering, VIT Vellore
+ * Product: CyberShield Nexus
+ * Scenario: NEDI - National Education Digital Infrastructure
+ *
+ * NEDI is a fictional academic demo scenario. Scheduling enables the
+ * automatic risk scan used by the security command center workflow.
  */
 @SpringBootApplication
+@EnableScheduling
 public class CyberShieldNexusApplication {
 
     public static void main(String[] args) {

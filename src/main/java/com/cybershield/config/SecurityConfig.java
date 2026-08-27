@@ -56,7 +56,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/login").permitAll()
                 .requestMatchers("/api/auth/register").permitAll()
                 // Static frontend files — no auth needed (JWT checked by JS)
-                .requestMatchers("/", "/login.html", "/dashboard.html",
+                .requestMatchers("/", "/index.html", "/login.html", "/dashboard.html",
                                  "/servers.html", "/firewalls.html",
                                  "/licenses.html", "/hardware.html",
                                  "/incidents.html", "/risk.html",

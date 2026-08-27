@@ -2,7 +2,7 @@
 """
 =============================================================================
 ATTACK SCRIPT 3 — JWT Tampering Attack
-CyberShield Nexus | AICTE PYHack02
+CyberShield Nexus | NEDI Demo Scenario
 OWASP Top 10: A02:2021 — Cryptographic Failures
 =============================================================================
 

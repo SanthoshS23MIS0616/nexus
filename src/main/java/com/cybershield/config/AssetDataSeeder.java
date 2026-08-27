@@ -3,6 +3,8 @@ package com.cybershield.config;
 import com.cybershield.model.*;
 import com.cybershield.model.AssetRelationship.AssetType;
 import com.cybershield.model.AssetRelationship.RelationshipType;
+import com.cybershield.model.DigitalService.ServiceStatus;
+import com.cybershield.model.DigitalService.ServiceType;
 import com.cybershield.model.Server.ServerStatus;
 import com.cybershield.model.Firewall.FirewallStatus;
 import com.cybershield.model.License.LicenseStatus;
@@ -19,14 +21,16 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 
 /**
- * AssetDataSeeder — seeds servers, firewalls, licenses, and hardware
- * with realistic data designed to tell the demo story.
+ * AssetDataSeeder — seeds all NEDI infrastructure assets.
  *
- * Story: The 'viewer' account connects through Firewall-Edge →
- *        Server-App → Server-DB — this path is what BFS will find.
+ * NEDI Demo Story:
+ *   The 'viewer' account (low-privilege student portal user) is compromised.
+ *   Attacker pivots: viewer → NEDI-DMZ-FW-01 → NEDI-EXAM-WEB-01
+ *                            → NEDI-EXAM-APP-01 → NEDI-EXAM-DB-01
  *
- * Some assets are intentionally "bad" (unpatched / expired license)
- * so the Risk Engine has data to score.
+ *   NEDI-EXAM-APP-01 is intentionally UNPATCHED (120 days).
+ *   NEDI-EXAM-DB-01 has an EXPIRED Oracle license → risk score 55+.
+ *   This is what BFS finds and Risk Engine flags.
  *
  * Runs AFTER DataInitializer (Order 2).
  */
@@ -36,11 +40,12 @@ import java.time.LocalDate;
 @Slf4j
 public class AssetDataSeeder implements CommandLineRunner {
 
-    private final ServerRepository serverRepository;
-    private final FirewallRepository firewallRepository;
-    private final LicenseRepository licenseRepository;
-    private final HardwareRepository hardwareRepository;
-    private final AssetRelationshipRepository relationshipRepository;
+    private final ServerRepository              serverRepository;
+    private final FirewallRepository            firewallRepository;
+    private final LicenseRepository             licenseRepository;
+    private final HardwareRepository            hardwareRepository;
+    private final AssetRelationshipRepository   relationshipRepository;
+    private final DigitalServiceRepository      digitalServiceRepository;
 
     @Override
     public void run(String... args) {
@@ -49,156 +54,193 @@ public class AssetDataSeeder implements CommandLineRunner {
             seedFirewalls();
             seedLicenses();
             seedHardware();
-            log.info("Asset seed data loaded successfully");
+            log.info("NEDI asset seed data loaded successfully");
         } else {
             log.debug("Assets already seeded — skipping asset seed");
         }
 
-        // Graph seeding is always checked independently
+        if (digitalServiceRepository.count() == 0) {
+            seedDigitalServices();
+        } else {
+            log.debug("Digital services already seeded — skipping");
+        }
+
         seedGraph();
     }
 
+    // ─────────────────────────────────────────────────────────────────
+    // SERVERS — NEDI infrastructure naming convention
+    // ─────────────────────────────────────────────────────────────────
     private void seedServers() {
-        // PATCHED server — recent patch date (low risk)
+
+        // NEDI Student Portal Web Server — recently patched (low risk)
         serverRepository.save(Server.builder()
-                .name("Server-Web-01").ipAddress("10.0.1.10")
+                .name("NEDI-STUDENT-WEB-01").ipAddress("10.0.1.10")
                 .operatingSystem("Ubuntu").osVersion("22.04 LTS")
-                .status(ServerStatus.RUNNING).location("Rack A1")
-                .owner("viewer")                       // owned by viewer account → IDOR demo target
+                .status(ServerStatus.RUNNING).location("DMZ Rack A1")
+                .owner("viewer")
+                .serviceCode("STUDENT_PORTAL")
                 .cpuCores(8).ramGb(32).storageGb(500)
-                .lastPatchDate(LocalDate.now().minusDays(10))  // recently patched
+                .lastPatchDate(LocalDate.now().minusDays(10))
                 .warrantyExpiry(LocalDate.now().plusYears(2))
-                .notes("Frontend web server").build());
+                .notes("Student Portal frontend — recently patched, low risk").build());
 
-        // UNPATCHED server — 120 days old patch (HIGH risk +30)
+        // NEDI Exam Portal App Server — UNPATCHED 120 days (HIGH risk +30)
         serverRepository.save(Server.builder()
-                .name("Server-App-02").ipAddress("10.0.1.11")
+                .name("NEDI-EXAM-APP-01").ipAddress("10.0.1.11")
                 .operatingSystem("CentOS").osVersion("7.9")
-                .status(ServerStatus.RUNNING).location("Rack A2")
+                .status(ServerStatus.RUNNING).location("Core Rack A2")
                 .owner("serveradmin")
+                .serviceCode("EXAM_PORTAL")
                 .cpuCores(16).ramGb(64).storageGb(1000)
-                .lastPatchDate(LocalDate.now().minusDays(120))  // UNPATCHED → risk +30
+                .lastPatchDate(LocalDate.now().minusDays(120))
                 .warrantyExpiry(LocalDate.now().plusYears(1))
-                .notes("Application server — UNPATCHED").build());
+                .notes("Exam Portal application server — UNPATCHED 120 DAYS — HIGH RISK").build());
 
-        // CRITICAL DATABASE SERVER — unpatched + connected to expired license (highest risk)
+        // NEDI Exam Portal DB Server — UNPATCHED + EXPIRED LICENSE (CRITICAL risk 55+)
         serverRepository.save(Server.builder()
-                .name("Server-DB-03").ipAddress("10.0.1.12")
+                .name("NEDI-EXAM-DB-01").ipAddress("10.0.1.12")
                 .operatingSystem("Windows Server").osVersion("2019")
-                .status(ServerStatus.RUNNING).location("Rack A3")
+                .status(ServerStatus.RUNNING).location("DB Rack A3")
                 .owner("admin")
+                .serviceCode("EXAM_PORTAL")
                 .cpuCores(32).ramGb(128).storageGb(5000)
-                .lastPatchDate(LocalDate.now().minusDays(95))   // UNPATCHED → risk +30
+                .lastPatchDate(LocalDate.now().minusDays(95))
                 .warrantyExpiry(LocalDate.now().plusMonths(3))
-                .notes("Primary database server — HIGH VALUE TARGET").build());
+                .notes("Exam Portal database — HIGH VALUE TARGET — unpatched + expired license").build());
 
-        // Stopped server
+        // NEDI Faculty Portal Server — healthy
         serverRepository.save(Server.builder()
-                .name("Server-Backup-04").ipAddress("10.0.1.13")
-                .operatingSystem("Ubuntu").osVersion("20.04 LTS")
-                .status(ServerStatus.STOPPED).location("Rack B1")
-                .owner("serveradmin")
-                .cpuCores(4).ramGb(16).storageGb(2000)
-                .lastPatchDate(LocalDate.now().minusDays(30))
-                .notes("Backup server — currently offline").build());
-
-        // Maintenance server
-        serverRepository.save(Server.builder()
-                .name("Server-Dev-05").ipAddress("10.0.1.14")
+                .name("NEDI-FACULTY-WEB-01").ipAddress("10.0.1.13")
                 .operatingSystem("Ubuntu").osVersion("22.04 LTS")
-                .status(ServerStatus.MAINTENANCE).location("Rack B2")
+                .status(ServerStatus.RUNNING).location("Core Rack B1")
                 .owner("serveradmin")
+                .serviceCode("FACULTY_PORTAL")
                 .cpuCores(8).ramGb(32).storageGb(500)
-                .lastPatchDate(LocalDate.now().minusDays(5))
-                .notes("Dev/test server — in maintenance").build());
+                .lastPatchDate(LocalDate.now().minusDays(30))
+                .warrantyExpiry(LocalDate.now().plusYears(2))
+                .notes("Faculty portal — healthy, recently patched").build());
 
-        log.info("Seeded 5 servers");
+        // NEDI ERP Server — in maintenance
+        serverRepository.save(Server.builder()
+                .name("NEDI-ERP-APP-01").ipAddress("10.0.1.14")
+                .operatingSystem("Red Hat Enterprise Linux").osVersion("8.6")
+                .status(ServerStatus.MAINTENANCE).location("Core Rack B2")
+                .owner("serveradmin")
+                .serviceCode("ERP")
+                .cpuCores(16).ramGb(64).storageGb(2000)
+                .lastPatchDate(LocalDate.now().minusDays(5))
+                .warrantyExpiry(LocalDate.now().plusYears(3))
+                .notes("ERP server — under scheduled maintenance").build());
+
+        log.info("Seeded 5 NEDI servers (Exam Portal at HIGH RISK)");
     }
 
+    // ─────────────────────────────────────────────────────────────────
+    // FIREWALLS — NEDI naming convention
+    // ─────────────────────────────────────────────────────────────────
     private void seedFirewalls() {
-        // Edge firewall — gateway to internal network (attack entry point)
+
+        // NEDI DMZ Edge Firewall — outdated firmware (attack entry point)
         firewallRepository.save(Firewall.builder()
-                .name("Firewall-Edge-01").vendor("Cisco").model("ASA 5505")
+                .name("NEDI-DMZ-FW-01").vendor("Cisco").model("ASA 5505")
                 .ipAddress("10.0.0.1").firmwareVersion("9.8.4")
                 .status(FirewallStatus.ACTIVE).location("DMZ Rack")
                 .activeRulesCount(142)
                 .lastRuleReviewDate(LocalDate.now().minusDays(45))
-                .lastFirmwareUpdate(LocalDate.now().minusDays(200))  // outdated firmware
+                .lastFirmwareUpdate(LocalDate.now().minusDays(200))
                 .warrantyExpiry(LocalDate.now().plusYears(1))
-                .notes("Primary edge firewall — OUTDATED FIRMWARE").build());
+                .notes("Primary DMZ edge firewall — OUTDATED FIRMWARE 200 days").build());
 
-        // Internal firewall — patched
+        // NEDI Core Internal Firewall — well maintained
         firewallRepository.save(Firewall.builder()
-                .name("Firewall-Internal-02").vendor("Palo Alto").model("PA-220")
+                .name("NEDI-CORE-FW-01").vendor("Palo Alto").model("PA-220")
                 .ipAddress("10.0.1.1").firmwareVersion("10.2.3")
                 .status(FirewallStatus.ACTIVE).location("Core Rack")
                 .activeRulesCount(89)
                 .lastRuleReviewDate(LocalDate.now().minusDays(15))
                 .lastFirmwareUpdate(LocalDate.now().minusDays(20))
                 .warrantyExpiry(LocalDate.now().plusYears(2))
-                .notes("Internal segment firewall — up to date").build());
+                .notes("Core internal firewall — up to date").build());
 
-        // DB firewall — protects database servers
+        // NEDI DB Zone Firewall — protects exam database
         firewallRepository.save(Firewall.builder()
-                .name("Firewall-DB-03").vendor("Fortinet").model("FortiGate 60F")
+                .name("NEDI-DB-FW-01").vendor("Fortinet").model("FortiGate 60F")
                 .ipAddress("10.0.1.50").firmwareVersion("7.2.1")
                 .status(FirewallStatus.ACTIVE).location("DB Rack")
                 .activeRulesCount(55)
                 .lastRuleReviewDate(LocalDate.now().minusDays(7))
                 .lastFirmwareUpdate(LocalDate.now().minusDays(30))
                 .warrantyExpiry(LocalDate.now().plusYears(3))
-                .notes("Database zone firewall").build());
+                .notes("Database zone firewall — protects Exam DB").build());
 
-        log.info("Seeded 3 firewalls");
+        log.info("Seeded 3 NEDI firewalls (DMZ-FW-01 has outdated firmware)");
     }
 
+    // ─────────────────────────────────────────────────────────────────
+    // LICENSES — tied to NEDI services
+    // ─────────────────────────────────────────────────────────────────
     private void seedLicenses() {
-        // EXPIRED license — used by Server-DB-03 (triggers risk +25)
+
+        // Fetch servers seeded above
+        var servers = serverRepository.findAll();
+        Server studentWeb = servers.stream().filter(s -> s.getName().contains("STUDENT-WEB")).findFirst().orElse(null);
+        Server examApp    = servers.stream().filter(s -> s.getName().contains("EXAM-APP")).findFirst().orElse(null);
+        Server examDb     = servers.stream().filter(s -> s.getName().contains("EXAM-DB")).findFirst().orElse(null);
+
+        // EXPIRED — Oracle license on Exam DB server (triggers risk +25 on NEDI-EXAM-DB-01)
         licenseRepository.save(License.builder()
                 .softwareName("Oracle Database 19c").vendor("Oracle")
                 .licenseType(LicenseType.PER_SEAT).totalSeats(5).usedSeats(5)
-                .expiryDate(LocalDate.now().minusDays(30))  // EXPIRED
+                .expiryDate(LocalDate.now().minusDays(30))
                 .purchaseDate(LocalDate.now().minusYears(3))
-                .renewalCost(45000.00).assignedTo("Server-DB-03")
+                .renewalCost(45000.00).assignedTo("NEDI-EXAM-DB-01")
+                .server(examDb)
                 .status(LicenseStatus.EXPIRED)
-                .notes("CRITICAL: Expired Oracle license — non-compliant").build());
+                .notes("CRITICAL: Expired Oracle license on Exam DB — compliance violation").build());
 
-        // Expiring soon — warning alert
+        // EXPIRING SOON — Windows license on Student Web server
         licenseRepository.save(License.builder()
                 .softwareName("Windows Server 2022").vendor("Microsoft")
                 .licenseType(LicenseType.PER_SEAT).totalSeats(10).usedSeats(7)
-                .expiryDate(LocalDate.now().plusDays(15))  // EXPIRING SOON
+                .expiryDate(LocalDate.now().plusDays(15))
                 .purchaseDate(LocalDate.now().minusYears(1))
-                .renewalCost(12000.00).assignedTo("Server-Web-01")
+                .renewalCost(12000.00).assignedTo("NEDI-STUDENT-WEB-01")
+                .server(studentWeb)
                 .status(LicenseStatus.PENDING_RENEWAL)
-                .notes("Renewal needed within 15 days").build());
+                .notes("Student Portal web license expiring in 15 days — renew immediately").build());
 
-        // Healthy active license
+        // ACTIVE — CrowdStrike endpoint protection for all servers
         licenseRepository.save(License.builder()
-                .softwareName("CrowdStrike Falcon").vendor("CrowdStrike")
+                .softwareName("CrowdStrike Falcon EDR").vendor("CrowdStrike")
                 .licenseType(LicenseType.SUBSCRIPTION).totalSeats(50).usedSeats(23)
                 .expiryDate(LocalDate.now().plusYears(1))
                 .purchaseDate(LocalDate.now().minusMonths(3))
-                .renewalCost(8500.00).assignedTo("All Servers")
+                .renewalCost(8500.00).assignedTo("All NEDI Servers")
                 .status(LicenseStatus.ACTIVE)
-                .notes("Endpoint security — active and healthy").build());
+                .notes("Endpoint security for all NEDI infrastructure — active and healthy").build());
 
-        // Another active license
+        // ACTIVE — RHEL for Exam App server
         licenseRepository.save(License.builder()
                 .softwareName("Red Hat Enterprise Linux").vendor("Red Hat")
                 .licenseType(LicenseType.SUBSCRIPTION).totalSeats(5).usedSeats(3)
                 .expiryDate(LocalDate.now().plusMonths(8))
                 .purchaseDate(LocalDate.now().minusMonths(4))
-                .renewalCost(6000.00).assignedTo("Server-App-02")
+                .renewalCost(6000.00).assignedTo("NEDI-EXAM-APP-01")
+                .server(examApp)
                 .status(LicenseStatus.ACTIVE)
-                .notes("RHEL subscription for app servers").build());
+                .notes("RHEL subscription for Exam Portal app server").build());
 
-        log.info("Seeded 4 licenses (1 expired, 1 expiring soon, 2 active)");
+        log.info("Seeded 4 licenses (Oracle EXPIRED on Exam DB = risk +25)");
     }
 
+    // ─────────────────────────────────────────────────────────────────
+    // HARDWARE — NEDI infrastructure asset tags
+    // ─────────────────────────────────────────────────────────────────
     private void seedHardware() {
+
         hardwareRepository.save(Hardware.builder()
-                .assetTag("AICTE-SW-001").name("Core Switch Layer-3")
+                .assetTag("NEDI-SW-001").name("Core Switch Layer-3")
                 .hardwareType(HardwareType.SWITCH).manufacturer("Cisco")
                 .model("Catalyst 3750").serialNumber("CAT3750-001")
                 .location("Core Rack, Slot 1").status(HardwareStatus.IN_USE)
@@ -206,10 +248,10 @@ public class AssetDataSeeder implements CommandLineRunner {
                 .warrantyExpiry(LocalDate.now().plusMonths(6))
                 .lastMaintenanceDate(LocalDate.now().minusDays(60))
                 .nextMaintenanceDate(LocalDate.now().plusDays(30))
-                .notes("Primary layer-3 switch — connects all VLANs").build());
+                .notes("Primary layer-3 switch — connects all NEDI VLANs").build());
 
         hardwareRepository.save(Hardware.builder()
-                .assetTag("AICTE-LB-001").name("Load Balancer Primary")
+                .assetTag("NEDI-LB-001").name("NEDI Load Balancer Primary")
                 .hardwareType(HardwareType.LOAD_BALANCER).manufacturer("F5")
                 .model("BIG-IP 2000s").serialNumber("F5-LB-001")
                 .location("DMZ Rack, Slot 3").status(HardwareStatus.IN_USE)
@@ -217,173 +259,211 @@ public class AssetDataSeeder implements CommandLineRunner {
                 .warrantyExpiry(LocalDate.now().plusYears(1))
                 .lastMaintenanceDate(LocalDate.now().minusDays(30))
                 .nextMaintenanceDate(LocalDate.now().plusDays(60))
-                .notes("Distributes traffic to web servers").build());
+                .notes("Distributes traffic across Student and Exam portal web servers").build());
 
         hardwareRepository.save(Hardware.builder()
-                .assetTag("AICTE-UPS-001").name("UPS Unit A")
+                .assetTag("NEDI-UPS-001").name("UPS Unit A — DB Rack")
                 .hardwareType(HardwareType.UPS).manufacturer("APC")
                 .model("Smart-UPS 3000").serialNumber("APC-UPS-001")
-                .location("Rack A, Power Unit").status(HardwareStatus.IN_USE)
+                .location("DB Rack A, Power Unit").status(HardwareStatus.IN_USE)
                 .purchaseDate(LocalDate.now().minusYears(4))
-                .warrantyExpiry(LocalDate.now().minusDays(10)) // WARRANTY EXPIRED
+                .warrantyExpiry(LocalDate.now().minusDays(10))
                 .lastMaintenanceDate(LocalDate.now().minusDays(90))
-                .nextMaintenanceDate(LocalDate.now().plusDays(0)) // DUE NOW
-                .notes("UPS for Rack A — WARRANTY EXPIRED, maintenance overdue").build());
+                .nextMaintenanceDate(LocalDate.now().plusDays(0))
+                .notes("UPS protecting Exam DB rack — WARRANTY EXPIRED, maintenance overdue").build());
 
-        log.info("Seeded 3 hardware assets");
+        log.info("Seeded 3 NEDI hardware assets");
     }
 
-    /**
-     * seedGraph() — creates 15 directed edges forming the attack path.
-     *
-     * THE DEMO STORY:
-     *   viewer(USER:3) is compromised → attacker pivots through:
-     *   Firewall-Edge-01 → Server-Web-01 → Server-App-02 → Server-DB-03
-     *
-     * Edge IDs (after seeding):
-     *   Users:     admin=1, serveradmin=2, viewer=3
-     *   Servers:   Web-01=1, App-02=2, DB-03=3, Backup-04=4, Dev-05=5
-     *   Firewalls: Edge-01=1, Internal-02=2, DB-03=3
-     *   Licenses:  Oracle=1, Windows=2, CrowdStrike=3, RHEL=4
-     *   Hardware:  Switch=1, LB=2, UPS=3
-     *
-     * ATTACK PATH (BFS will find this):
-     *   USER:3 → FIREWALL:1 → SERVER:1 → SERVER:2 → SERVER:3
-     */
+    // ─────────────────────────────────────────────────────────────────
+    // DIGITAL SERVICES — 8 NEDI services
+    // ─────────────────────────────────────────────────────────────────
+    private void seedDigitalServices() {
+
+        digitalServiceRepository.save(DigitalService.builder()
+                .serviceCode("STUDENT_PORTAL").name("Student Portal")
+                .serviceType(ServiceType.STUDENT_PORTAL)
+                .description("Student profile, fee payment, academic records, and attendance")
+                .hostDomain("student.nedi.local")
+                .status(ServiceStatus.HEALTHY)
+                .criticalityLevel(4).build());
+
+        digitalServiceRepository.save(DigitalService.builder()
+                .serviceCode("FACULTY_PORTAL").name("Faculty Portal")
+                .serviceType(ServiceType.FACULTY_PORTAL)
+                .description("Faculty attendance, course management, and evaluation workflow")
+                .hostDomain("faculty.nedi.local")
+                .status(ServiceStatus.HEALTHY)
+                .criticalityLevel(3).build());
+
+        // EXAM PORTAL — intentionally HIGH_RISK for the demo scenario
+        digitalServiceRepository.save(DigitalService.builder()
+                .serviceCode("EXAM_PORTAL").name("Exam Portal")
+                .serviceType(ServiceType.EXAM_PORTAL)
+                .description("National examination system — high-impact, used by 500+ institutions")
+                .hostDomain("exam.nedi.local")
+                .status(ServiceStatus.HIGH_RISK)
+                .criticalityLevel(5).build());
+
+        digitalServiceRepository.save(DigitalService.builder()
+                .serviceCode("ERP").name("ERP System")
+                .serviceType(ServiceType.ERP)
+                .description("Finance, HR, operations, and administrative management")
+                .hostDomain("erp.nedi.local")
+                .status(ServiceStatus.DEGRADED)
+                .criticalityLevel(4).build());
+
+        digitalServiceRepository.save(DigitalService.builder()
+                .serviceCode("ADMISSION_PORTAL").name("Admission Portal")
+                .serviceType(ServiceType.ADMISSION_PORTAL)
+                .description("Student admission applications and document verification")
+                .hostDomain("admission.nedi.local")
+                .status(ServiceStatus.HEALTHY)
+                .criticalityLevel(3).build());
+
+        digitalServiceRepository.save(DigitalService.builder()
+                .serviceCode("DIGITAL_LIBRARY").name("Digital Library")
+                .serviceType(ServiceType.DIGITAL_LIBRARY)
+                .description("E-books, research papers, and digital resource access")
+                .hostDomain("library.nedi.local")
+                .status(ServiceStatus.HEALTHY)
+                .criticalityLevel(2).build());
+
+        digitalServiceRepository.save(DigitalService.builder()
+                .serviceCode("LMS").name("Learning Management System")
+                .serviceType(ServiceType.LMS)
+                .description("Online classes, assignments, quizzes, and course submissions")
+                .hostDomain("lms.nedi.local")
+                .status(ServiceStatus.HEALTHY)
+                .criticalityLevel(4).build());
+
+        digitalServiceRepository.save(DigitalService.builder()
+                .serviceCode("MAIL_SERVICE").name("Institutional Mail")
+                .serviceType(ServiceType.MAIL_SERVICE)
+                .description("Institutional email and identity-linked communication service")
+                .hostDomain("mail.nedi.local")
+                .status(ServiceStatus.HEALTHY)
+                .criticalityLevel(3).build());
+
+        log.info("Seeded 8 NEDI digital services (Exam Portal = HIGH_RISK, ERP = DEGRADED)");
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // GRAPH — attack path edges (BFS traversal)
+    // ─────────────────────────────────────────────────────────────────
     private void seedGraph() {
         if (relationshipRepository.count() > 0) {
             log.debug("Graph edges already seeded — skipping");
             return;
         }
 
-        // Helper lambda to build and save one edge
         java.util.function.Consumer<AssetRelationship> save = relationshipRepository::save;
 
-        // ── USER → FIREWALL edges (entry points) ─────────────────────────
-        // viewer user connects to Edge firewall (LOW trust = easy to compromise)
+        // ── USER → FIREWALL (entry points) ─────────────────────────
+        // viewer (student user) → DMZ firewall — LOW TRUST (attack entry)
         save.accept(AssetRelationship.builder()
-                .sourceAssetId(3L).sourceType(AssetType.USER)         // viewer
-                .targetAssetId(1L).targetType(AssetType.FIREWALL)     // Firewall-Edge-01
+                .sourceAssetId(3L).sourceType(AssetType.USER)
+                .targetAssetId(1L).targetType(AssetType.FIREWALL)
                 .relationshipType(RelationshipType.CONNECTS_TO)
-                .trustLevel(20)   // LOW trust — attacker entry point
-                .build());
+                .trustLevel(20).build());
 
-        // serveradmin connects to Internal firewall
+        // serveradmin → Core firewall
         save.accept(AssetRelationship.builder()
-                .sourceAssetId(2L).sourceType(AssetType.USER)         // serveradmin
-                .targetAssetId(2L).targetType(AssetType.FIREWALL)     // Firewall-Internal-02
+                .sourceAssetId(2L).sourceType(AssetType.USER)
+                .targetAssetId(2L).targetType(AssetType.FIREWALL)
                 .relationshipType(RelationshipType.CONNECTS_TO)
-                .trustLevel(70)
-                .build());
+                .trustLevel(70).build());
 
-        // admin connects to all firewalls (full access)
+        // admin → DMZ firewall (management)
         save.accept(AssetRelationship.builder()
-                .sourceAssetId(1L).sourceType(AssetType.USER)         // admin
-                .targetAssetId(1L).targetType(AssetType.FIREWALL)     // Firewall-Edge-01
+                .sourceAssetId(1L).sourceType(AssetType.USER)
+                .targetAssetId(1L).targetType(AssetType.FIREWALL)
                 .relationshipType(RelationshipType.MANAGES)
-                .trustLevel(90)
-                .build());
+                .trustLevel(90).build());
 
-        // ── FIREWALL → SERVER edges (pivot points) ───────────────────────
-        // Edge firewall connects to Web server (LOW trust — exposed DMZ)
+        // ── FIREWALL → SERVER (pivot points) ───────────────────────
+        // NEDI-DMZ-FW-01 → NEDI-STUDENT-WEB-01 (LOW trust — internet-facing)
         save.accept(AssetRelationship.builder()
-                .sourceAssetId(1L).sourceType(AssetType.FIREWALL)     // Firewall-Edge-01
-                .targetAssetId(1L).targetType(AssetType.SERVER)       // Server-Web-01
+                .sourceAssetId(1L).sourceType(AssetType.FIREWALL)
+                .targetAssetId(1L).targetType(AssetType.SERVER)
                 .relationshipType(RelationshipType.CONNECTS_TO)
-                .trustLevel(25)   // LOW — DMZ server, internet-facing
-                .build());
+                .trustLevel(25).build());
 
-        // Edge firewall also sees Dev server
+        // NEDI-DMZ-FW-01 → NEDI-ERP-APP-01
         save.accept(AssetRelationship.builder()
-                .sourceAssetId(1L).sourceType(AssetType.FIREWALL)     // Firewall-Edge-01
-                .targetAssetId(5L).targetType(AssetType.SERVER)       // Server-Dev-05
+                .sourceAssetId(1L).sourceType(AssetType.FIREWALL)
+                .targetAssetId(5L).targetType(AssetType.SERVER)
                 .relationshipType(RelationshipType.CONNECTS_TO)
-                .trustLevel(30)
-                .build());
+                .trustLevel(30).build());
 
-        // Internal firewall connects to App server
+        // NEDI-CORE-FW-01 → NEDI-EXAM-APP-01
         save.accept(AssetRelationship.builder()
-                .sourceAssetId(2L).sourceType(AssetType.FIREWALL)     // Firewall-Internal-02
-                .targetAssetId(2L).targetType(AssetType.SERVER)       // Server-App-02
+                .sourceAssetId(2L).sourceType(AssetType.FIREWALL)
+                .targetAssetId(2L).targetType(AssetType.SERVER)
                 .relationshipType(RelationshipType.CONNECTS_TO)
-                .trustLevel(50)
-                .build());
+                .trustLevel(50).build());
 
-        // DB firewall connects to DB server
+        // NEDI-DB-FW-01 → NEDI-EXAM-DB-01
         save.accept(AssetRelationship.builder()
-                .sourceAssetId(3L).sourceType(AssetType.FIREWALL)     // Firewall-DB-03
-                .targetAssetId(3L).targetType(AssetType.SERVER)       // Server-DB-03
+                .sourceAssetId(3L).sourceType(AssetType.FIREWALL)
+                .targetAssetId(3L).targetType(AssetType.SERVER)
                 .relationshipType(RelationshipType.CONNECTS_TO)
-                .trustLevel(60)
-                .build());
+                .trustLevel(60).build());
 
-        // ── SERVER → SERVER edges (lateral movement) ─────────────────────
-        // Web server can reach App server (lateral pivot — CRITICAL path)
+        // ── SERVER → SERVER (lateral movement) ─────────────────────
+        // NEDI-STUDENT-WEB-01 → NEDI-EXAM-APP-01 (lateral pivot)
         save.accept(AssetRelationship.builder()
-                .sourceAssetId(1L).sourceType(AssetType.SERVER)       // Server-Web-01
-                .targetAssetId(2L).targetType(AssetType.SERVER)       // Server-App-02
+                .sourceAssetId(1L).sourceType(AssetType.SERVER)
+                .targetAssetId(2L).targetType(AssetType.SERVER)
                 .relationshipType(RelationshipType.CONNECTS_TO)
-                .trustLevel(40)   // Medium-low — attacker can pivot here
-                .build());
+                .trustLevel(40).build());
 
-        // App server can reach DB server (CRITICAL lateral move)
+        // NEDI-EXAM-APP-01 → NEDI-EXAM-DB-01 (CRITICAL lateral move)
         save.accept(AssetRelationship.builder()
-                .sourceAssetId(2L).sourceType(AssetType.SERVER)       // Server-App-02
-                .targetAssetId(3L).targetType(AssetType.SERVER)       // Server-DB-03
+                .sourceAssetId(2L).sourceType(AssetType.SERVER)
+                .targetAssetId(3L).targetType(AssetType.SERVER)
                 .relationshipType(RelationshipType.CONNECTS_TO)
-                .trustLevel(55)   // App → DB is common but risky
-                .build());
+                .trustLevel(55).build());
 
-        // Backup server connects to DB (backup job)
+        // NEDI-FACULTY-WEB-01 → NEDI-EXAM-DB-01 (backup job)
         save.accept(AssetRelationship.builder()
-                .sourceAssetId(4L).sourceType(AssetType.SERVER)       // Server-Backup-04
-                .targetAssetId(3L).targetType(AssetType.SERVER)       // Server-DB-03
+                .sourceAssetId(4L).sourceType(AssetType.SERVER)
+                .targetAssetId(3L).targetType(AssetType.SERVER)
                 .relationshipType(RelationshipType.CONNECTS_TO)
-                .trustLevel(45)
-                .build());
+                .trustLevel(45).build());
 
-        // ── SERVER → LICENSE edges (asset dependency) ────────────────────
-        // DB server hosts the Oracle license (expired — risk +25)
+        // ── SERVER → LICENSE (dependencies) ────────────────────────
         save.accept(AssetRelationship.builder()
-                .sourceAssetId(3L).sourceType(AssetType.SERVER)       // Server-DB-03
-                .targetAssetId(1L).targetType(AssetType.LICENSE)      // Oracle DB (EXPIRED)
+                .sourceAssetId(3L).sourceType(AssetType.SERVER)
+                .targetAssetId(1L).targetType(AssetType.LICENSE)
                 .relationshipType(RelationshipType.HOSTS)
-                .trustLevel(80)
-                .build());
+                .trustLevel(80).build());
 
-        // Web server hosts Windows Server license
         save.accept(AssetRelationship.builder()
-                .sourceAssetId(1L).sourceType(AssetType.SERVER)       // Server-Web-01
-                .targetAssetId(2L).targetType(AssetType.LICENSE)      // Windows Server
+                .sourceAssetId(1L).sourceType(AssetType.SERVER)
+                .targetAssetId(2L).targetType(AssetType.LICENSE)
                 .relationshipType(RelationshipType.HOSTS)
-                .trustLevel(80)
-                .build());
+                .trustLevel(80).build());
 
-        // ── HARDWARE → SERVER edges (infrastructure) ─────────────────────
-        // Core switch connects to all servers (infrastructure layer)
+        // ── HARDWARE → SERVER (infrastructure) ─────────────────────
         save.accept(AssetRelationship.builder()
-                .sourceAssetId(1L).sourceType(AssetType.HARDWARE)     // Core Switch
-                .targetAssetId(1L).targetType(AssetType.SERVER)       // Server-Web-01
+                .sourceAssetId(1L).sourceType(AssetType.HARDWARE)
+                .targetAssetId(1L).targetType(AssetType.SERVER)
                 .relationshipType(RelationshipType.CONNECTS_TO)
-                .trustLevel(85)
-                .build());
+                .trustLevel(85).build());
 
-        // Load balancer connects to Web server
         save.accept(AssetRelationship.builder()
-                .sourceAssetId(2L).sourceType(AssetType.HARDWARE)     // Load Balancer
-                .targetAssetId(1L).targetType(AssetType.SERVER)       // Server-Web-01
+                .sourceAssetId(2L).sourceType(AssetType.HARDWARE)
+                .targetAssetId(1L).targetType(AssetType.SERVER)
                 .relationshipType(RelationshipType.CONNECTS_TO)
-                .trustLevel(75)
-                .build());
+                .trustLevel(75).build());
 
-        // Load balancer connects to App server
         save.accept(AssetRelationship.builder()
-                .sourceAssetId(2L).sourceType(AssetType.HARDWARE)     // Load Balancer
-                .targetAssetId(2L).targetType(AssetType.SERVER)       // Server-App-02
+                .sourceAssetId(2L).sourceType(AssetType.HARDWARE)
+                .targetAssetId(2L).targetType(AssetType.SERVER)
                 .relationshipType(RelationshipType.CONNECTS_TO)
-                .trustLevel(75)
-                .build());
+                .trustLevel(75).build());
 
-        log.info("Seeded 15 graph edges — attack path: USER:3 → FW:1 → SRV:1 → SRV:2 → SRV:3");
+        log.info("Seeded 15 graph edges — BFS path: viewer → NEDI-DMZ-FW-01 → NEDI-STUDENT-WEB-01 → NEDI-EXAM-APP-01 → NEDI-EXAM-DB-01");
     }
 }
