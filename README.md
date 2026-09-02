@@ -194,3 +194,4 @@ cybershield-nexus/
 Project identity is clean. CyberShield Nexus is the product name. NEDI (National Education Digital Infrastructure) is the fictional scenario. All AICTE/PYHack02 references have been removed from frontend, backend comments, seed data, attack scripts, and the project report. The scenario is clearly presented as fictional and safe for academic demonstration.
 
 Phase 2 onwards: Backend NEDI models (Institution, DigitalService), richer seed data, AI-assisted recommendations, SOC dashboard redesign, incident workflow, report generation, and tests.
+"# nedi" 
