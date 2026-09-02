@@ -9,6 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -48,13 +50,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String username = jwtUtil.extractUsername(token);
             String role = jwtUtil.extractRole(token);
 
-            // Create Spring Security authentication object
-            // Role must be prefixed with "ROLE_" for Spring Security
+            // Create a UserDetails principal so @AuthenticationPrincipal UserDetails
+            // works consistently in controllers.
+            UserDetails principal = User.withUsername(username)
+                    .password("")
+                    .authorities(List.of(new SimpleGrantedAuthority("ROLE_" + role)))
+                    .build();
+
+            // Create Spring Security authentication object.
+            // Role must be prefixed with "ROLE_" for Spring Security.
             UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(
-                            username,
+                            principal,
                             null,
-                            List.of(new SimpleGrantedAuthority("ROLE_" + role))
+                            principal.getAuthorities()
                     );
 
             authentication.setDetails(

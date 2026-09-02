@@ -3,6 +3,7 @@ package com.cybershield.controller;
 import com.cybershield.model.AuditLog;
 import com.cybershield.model.DigitalService;
 import com.cybershield.model.DigitalService.ServiceStatus;
+import com.cybershield.model.Institution.InstitutionStatus;
 import com.cybershield.model.License;
 import com.cybershield.service.*;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,7 @@ public class DashboardController {
     private final IncidentService       incidentService;
     private final RiskEngineService     riskEngineService;
     private final DigitalServiceService digitalServiceService;
+    private final InstitutionService    institutionService;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','SERVER_ADMIN','VIEWER')")
@@ -51,12 +53,19 @@ public class DashboardController {
         counts.put("degradedServices", digitalServiceService.countByStatus(ServiceStatus.DEGRADED));
         counts.put("highRiskServices", digitalServiceService.countByStatus(ServiceStatus.HIGH_RISK)
                                      + digitalServiceService.countByStatus(ServiceStatus.DOWN));
-        counts.put("totalInstitutions", 500);
+        counts.put("totalInstitutions", institutionService.countTotal());
+        counts.put("activeInstitutions", institutionService.countByStatus(InstitutionStatus.ACTIVE));
+        counts.put("atRiskInstitutions", institutionService.countByStatus(InstitutionStatus.DEGRADED)
+                + institutionService.countByStatus(InstitutionStatus.HIGH_RISK)
+                + institutionService.countByStatus(InstitutionStatus.OFFLINE));
+        counts.put("representedInstitutionCoverage", 500);
         dashboard.put("counts", counts);
 
         // ── NEDI Service Health List ──────────────────────────────
         List<DigitalService> allServices = digitalServiceService.getAllServices();
         dashboard.put("services", allServices);
+        dashboard.put("institutions", institutionService.getAll());
+        dashboard.put("atRiskInstitutions", institutionService.getAtRiskInstitutions());
 
         // ── Exam Portal Spotlight ─────────────────────────────────
         allServices.stream()

@@ -40,7 +40,7 @@
       <h2 style="font-size:20px;font-weight:700">Firewalls</h2>
       <p style="color:var(--text-muted);font-size:13px;margin-top:2px">Network perimeter and internal firewall devices</p>
     </div>
-    <button class="btn btn-primary" onclick="openAdd()">＋ Add Firewall</button>
+    <button class="btn btn-primary" id="add-firewall-btn" onclick="openAdd()">＋ Add Firewall</button>
   </div>
   <div class="card">
     <div class="card-header"><span class="card-title" id="fw-count">Firewalls</span></div>
@@ -67,7 +67,7 @@
         <div class="form-group"><label class="form-label">Vendor</label><input class="form-control" id="f-vendor"></div>
         <div class="form-group"><label class="form-label">Model</label><input class="form-control" id="f-model"></div>
         <div class="form-group"><label class="form-label">Status</label>
-          <select class="form-control" id="f-status"><option>ACTIVE</option><option>INACTIVE</option><option>MAINTENANCE</option><option>DECOMMISSIONED</option></select></div>
+          <select class="form-control" id="f-status"><option>ACTIVE</option><option>INACTIVE</option><option>MAINTENANCE</option><option>COMPROMISED</option></select></div>
         <div class="form-group"><label class="form-label">Firmware Version</label><input class="form-control" id="f-firmware"></div>
         <div class="form-group"><label class="form-label">Location</label><input class="form-control" id="f-location"></div>
         <div class="form-group"><label class="form-label">Rules Count</label><input class="form-control" id="f-rules" type="number"></div>
@@ -94,6 +94,7 @@
     } catch(e) { toast('Failed: ' + e.message, 'error'); }
   }
   function render(data) {
+    const user = getUser();
     document.getElementById('fw-body').innerHTML = data.map(f => `<tr>
       <td><strong>${f.name}</strong></td>
       <td class="text-mono" style="font-size:12px">${f.ipAddress}</td>
@@ -104,7 +105,7 @@
       <td style="font-size:12px;color:var(--text-muted)">${f.location || '—'}</td>
       <td>
         <button class="btn btn-sm btn-secondary" onclick="edit(${f.id})">✏ Edit</button>
-        <button class="btn btn-sm btn-danger" onclick="del(${f.id})" style="margin-left:4px">🗑</button>
+        ${user.role === 'ADMIN' ? `<button class="btn btn-sm btn-danger" onclick="del(${f.id})" style="margin-left:4px">🗑</button>` : ''}
       </td>
     </tr>`).join('');
   }
@@ -126,7 +127,7 @@
     document.getElementById('f-status').value = f.status;
     document.getElementById('f-firmware').value = f.firmwareVersion || '';
     document.getElementById('f-location').value = f.location || '';
-    document.getElementById('f-rules').value = f.rulesCount || '';
+    document.getElementById('f-rules').value = f.activeRulesCount || '';
     document.getElementById('modal').classList.add('open');
   }
   async function save() {
@@ -139,7 +140,7 @@
       status: document.getElementById('f-status').value,
       firmwareVersion: document.getElementById('f-firmware').value,
       location: document.getElementById('f-location').value,
-      rulesCount: parseInt(document.getElementById('f-rules').value) || 0
+      activeRulesCount: parseInt(document.getElementById('f-rules').value) || 0
     };
     try {
       if (id) await apiPut('/firewalls/' + id, body);
@@ -154,6 +155,9 @@
     catch(e) { toast('Error: ' + e.message, 'error'); }
   }
   function closeModal() { document.getElementById('modal').classList.remove('open'); }
+  if (getUser().role === 'VIEWER') {
+    document.getElementById('add-firewall-btn').style.display = 'none';
+  }
   load();
 </script>
 </body>

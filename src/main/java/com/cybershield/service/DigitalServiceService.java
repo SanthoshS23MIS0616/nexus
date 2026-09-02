@@ -6,6 +6,7 @@ import com.cybershield.repository.DigitalServiceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -32,8 +33,13 @@ public class DigitalServiceService {
         return digitalServiceRepository.countByStatus(status);
     }
 
+    public long countCriticalServices() {
+        return digitalServiceRepository.countByCriticalityLevelGreaterThanEqual(4);
+    }
+
     public List<DigitalService> getHighRiskServices() {
-        List<DigitalService> highRisk = digitalServiceRepository.findByStatus(ServiceStatus.HIGH_RISK);
+        List<DigitalService> highRisk = new ArrayList<>(
+                digitalServiceRepository.findByStatus(ServiceStatus.HIGH_RISK));
         highRisk.addAll(digitalServiceRepository.findByStatus(ServiceStatus.DOWN));
         return highRisk;
     }

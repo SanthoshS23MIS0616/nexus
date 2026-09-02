@@ -64,6 +64,7 @@ async function apiPut(path, body) {
     },
     body: body ? JSON.stringify(body) : undefined
   });
+  if (res.status === 401) { clearSession(); window.location.href = '/login.html'; return; }
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -73,6 +74,7 @@ async function apiDelete(path) {
     method: 'DELETE',
     headers: { 'Authorization': 'Bearer ' + getToken() }
   });
+  if (res.status === 401) { clearSession(); window.location.href = '/login.html'; return; }
   if (!res.ok) throw new Error(await res.text());
   return res.status === 204 ? null : res.json();
 }

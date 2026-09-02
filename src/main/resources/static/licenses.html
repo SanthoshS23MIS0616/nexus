@@ -40,7 +40,7 @@
       <h2 style="font-size:20px;font-weight:700">Licenses</h2>
       <p style="color:var(--text-muted);font-size:13px;margin-top:2px">Expired licenses raise risk score +25 on linked servers</p>
     </div>
-    <button class="btn btn-primary" onclick="openAdd()">＋ Add License</button>
+    <button class="btn btn-primary" id="add-license-btn" onclick="openAdd()">＋ Add License</button>
   </div>
 
   <div class="card">
@@ -120,6 +120,7 @@
   }
 
   function render(data) {
+    const user = getUser();
     document.getElementById('lic-count').textContent = `Licenses (${data.length})`;
     const today = new Date();
     document.getElementById('lic-body').innerHTML = data.map(l => {
@@ -143,8 +144,10 @@
         <td>${expiryDisplay}</td>
         <td style="font-size:12px">${l.assignedTo || '—'}</td>
         <td>
+          ${user.role === 'ADMIN' ? `
           <button class="btn btn-sm btn-secondary" onclick="edit(${l.id})">✏ Edit</button>
           <button class="btn btn-sm btn-danger" onclick="del(${l.id})" style="margin-left:4px">🗑</button>
+          ` : '<span class="text-muted" style="font-size:11px">Read only</span>'}
         </td>
       </tr>`;
     }).join('');
@@ -202,6 +205,9 @@
   }
 
   function closeModal() { document.getElementById('modal').classList.remove('open'); }
+  if (getUser().role !== 'ADMIN') {
+    document.getElementById('add-license-btn').style.display = 'none';
+  }
   load();
 </script>
 </body>

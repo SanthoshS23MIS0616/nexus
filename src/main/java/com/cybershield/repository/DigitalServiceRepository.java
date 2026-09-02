@@ -13,4 +13,5 @@ public interface DigitalServiceRepository extends JpaRepository<DigitalService, 
     Optional<DigitalService> findByServiceCode(String serviceCode);
     List<DigitalService> findByStatus(ServiceStatus status);
     long countByStatus(ServiceStatus status);
+    long countByCriticalityLevelGreaterThanEqual(int criticalityLevel);
 }

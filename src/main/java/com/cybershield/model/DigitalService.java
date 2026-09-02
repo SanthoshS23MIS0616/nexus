@@ -40,6 +40,10 @@ public class DigitalService {
     @Column(name = "host_domain", length = 100)
     private String hostDomain;
 
+    /** Institution or central NEDI unit that owns this service */
+    @Column(name = "institution_code", length = 30)
+    private String institutionCode;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ServiceStatus status;

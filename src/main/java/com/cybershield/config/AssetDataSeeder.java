@@ -5,6 +5,8 @@ import com.cybershield.model.AssetRelationship.AssetType;
 import com.cybershield.model.AssetRelationship.RelationshipType;
 import com.cybershield.model.DigitalService.ServiceStatus;
 import com.cybershield.model.DigitalService.ServiceType;
+import com.cybershield.model.Institution.InstitutionStatus;
+import com.cybershield.model.Institution.InstitutionType;
 import com.cybershield.model.Server.ServerStatus;
 import com.cybershield.model.Firewall.FirewallStatus;
 import com.cybershield.model.License.LicenseStatus;
@@ -46,6 +48,7 @@ public class AssetDataSeeder implements CommandLineRunner {
     private final HardwareRepository            hardwareRepository;
     private final AssetRelationshipRepository   relationshipRepository;
     private final DigitalServiceRepository      digitalServiceRepository;
+    private final InstitutionRepository         institutionRepository;
 
     @Override
     public void run(String... args) {
@@ -63,6 +66,12 @@ public class AssetDataSeeder implements CommandLineRunner {
             seedDigitalServices();
         } else {
             log.debug("Digital services already seeded — skipping");
+        }
+
+        if (institutionRepository.count() == 0) {
+            seedInstitutions();
+        } else {
+            log.debug("Institutions already seeded — skipping");
         }
 
         seedGraph();
@@ -285,6 +294,7 @@ public class AssetDataSeeder implements CommandLineRunner {
                 .serviceType(ServiceType.STUDENT_PORTAL)
                 .description("Student profile, fee payment, academic records, and attendance")
                 .hostDomain("student.nedi.local")
+                .institutionCode("NEDI-CENTRAL")
                 .status(ServiceStatus.HEALTHY)
                 .criticalityLevel(4).build());
 
@@ -293,6 +303,7 @@ public class AssetDataSeeder implements CommandLineRunner {
                 .serviceType(ServiceType.FACULTY_PORTAL)
                 .description("Faculty attendance, course management, and evaluation workflow")
                 .hostDomain("faculty.nedi.local")
+                .institutionCode("NEDI-CENTRAL")
                 .status(ServiceStatus.HEALTHY)
                 .criticalityLevel(3).build());
 
@@ -302,6 +313,7 @@ public class AssetDataSeeder implements CommandLineRunner {
                 .serviceType(ServiceType.EXAM_PORTAL)
                 .description("National examination system — high-impact, used by 500+ institutions")
                 .hostDomain("exam.nedi.local")
+                .institutionCode("NEDI-CENTRAL")
                 .status(ServiceStatus.HIGH_RISK)
                 .criticalityLevel(5).build());
 
@@ -310,6 +322,7 @@ public class AssetDataSeeder implements CommandLineRunner {
                 .serviceType(ServiceType.ERP)
                 .description("Finance, HR, operations, and administrative management")
                 .hostDomain("erp.nedi.local")
+                .institutionCode("NEDI-CENTRAL")
                 .status(ServiceStatus.DEGRADED)
                 .criticalityLevel(4).build());
 
@@ -318,6 +331,7 @@ public class AssetDataSeeder implements CommandLineRunner {
                 .serviceType(ServiceType.ADMISSION_PORTAL)
                 .description("Student admission applications and document verification")
                 .hostDomain("admission.nedi.local")
+                .institutionCode("NEDI-CENTRAL")
                 .status(ServiceStatus.HEALTHY)
                 .criticalityLevel(3).build());
 
@@ -326,6 +340,7 @@ public class AssetDataSeeder implements CommandLineRunner {
                 .serviceType(ServiceType.DIGITAL_LIBRARY)
                 .description("E-books, research papers, and digital resource access")
                 .hostDomain("library.nedi.local")
+                .institutionCode("NEDI-CENTRAL")
                 .status(ServiceStatus.HEALTHY)
                 .criticalityLevel(2).build());
 
@@ -334,6 +349,7 @@ public class AssetDataSeeder implements CommandLineRunner {
                 .serviceType(ServiceType.LMS)
                 .description("Online classes, assignments, quizzes, and course submissions")
                 .hostDomain("lms.nedi.local")
+                .institutionCode("NEDI-CENTRAL")
                 .status(ServiceStatus.HEALTHY)
                 .criticalityLevel(4).build());
 
@@ -342,10 +358,97 @@ public class AssetDataSeeder implements CommandLineRunner {
                 .serviceType(ServiceType.MAIL_SERVICE)
                 .description("Institutional email and identity-linked communication service")
                 .hostDomain("mail.nedi.local")
+                .institutionCode("NEDI-CENTRAL")
                 .status(ServiceStatus.HEALTHY)
                 .criticalityLevel(3).build());
 
         log.info("Seeded 8 NEDI digital services (Exam Portal = HIGH_RISK, ERP = DEGRADED)");
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // INSTITUTIONS — representative NEDI monitored organizations
+    // ─────────────────────────────────────────────────────────────────
+    private void seedInstitutions() {
+
+        institutionRepository.save(Institution.builder()
+                .institutionCode("NEDI-CENTRAL")
+                .name("NEDI Central Operations")
+                .type(InstitutionType.CENTRAL_OPERATIONS)
+                .city("New Delhi")
+                .state("Delhi")
+                .region("National")
+                .status(InstitutionStatus.ACTIVE)
+                .studentCount(0)
+                .servicesMonitored(8)
+                .notes("Central SOC and digital infrastructure operations unit for the fictional NEDI scenario")
+                .build());
+
+        institutionRepository.save(Institution.builder()
+                .institutionCode("COL-A-SOUTH")
+                .name("College A - South Campus")
+                .type(InstitutionType.ENGINEERING_COLLEGE)
+                .city("Chennai")
+                .state("Tamil Nadu")
+                .region("South")
+                .status(InstitutionStatus.ACTIVE)
+                .studentCount(8400)
+                .servicesMonitored(8)
+                .notes("Representative institution using Student, Faculty, Exam, ERP, LMS, Library, Admission and Mail services")
+                .build());
+
+        institutionRepository.save(Institution.builder()
+                .institutionCode("COL-B-WEST")
+                .name("College B - Western Institute")
+                .type(InstitutionType.ENGINEERING_COLLEGE)
+                .city("Pune")
+                .state("Maharashtra")
+                .region("West")
+                .status(InstitutionStatus.ACTIVE)
+                .studentCount(6200)
+                .servicesMonitored(8)
+                .notes("Healthy institution in the NEDI monitoring scenario")
+                .build());
+
+        institutionRepository.save(Institution.builder()
+                .institutionCode("UNI-C-NORTH")
+                .name("University C - North Cluster")
+                .type(InstitutionType.UNIVERSITY)
+                .city("Jaipur")
+                .state("Rajasthan")
+                .region("North")
+                .status(InstitutionStatus.DEGRADED)
+                .studentCount(18500)
+                .servicesMonitored(8)
+                .notes("Representative degraded institution affected by Exam Portal latency during the demo")
+                .build());
+
+        institutionRepository.save(Institution.builder()
+                .institutionCode("POLY-D-EAST")
+                .name("Polytechnic D - East Campus")
+                .type(InstitutionType.POLYTECHNIC)
+                .city("Kolkata")
+                .state("West Bengal")
+                .region("East")
+                .status(InstitutionStatus.ACTIVE)
+                .studentCount(4100)
+                .servicesMonitored(6)
+                .notes("Smaller institution with partial service coverage")
+                .build());
+
+        institutionRepository.save(Institution.builder()
+                .institutionCode("COL-E-CENTRAL")
+                .name("College E - Central Region")
+                .type(InstitutionType.ARTS_AND_SCIENCE_COLLEGE)
+                .city("Bhopal")
+                .state("Madhya Pradesh")
+                .region("Central")
+                .status(InstitutionStatus.HIGH_RISK)
+                .studentCount(5300)
+                .servicesMonitored(7)
+                .notes("Representative institution impacted by the high-risk Exam Portal scenario")
+                .build());
+
+        log.info("Seeded 6 representative NEDI institutions");
     }
 
     // ─────────────────────────────────────────────────────────────────
